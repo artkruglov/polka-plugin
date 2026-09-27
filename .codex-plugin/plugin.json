@@ -1,0 +1,24 @@
+{
+  "name": "polka",
+  "version": "0.3.0",
+  "description": "Полка (polochka.app): your agent saves HTML pages, reports and prototypes to your private shelf and gives you a link.",
+  "author": { "name": "Artem Kruglov", "url": "https://github.com/artkruglov" },
+  "homepage": "https://polochka.app",
+  "repository": "https://github.com/artkruglov/polka",
+  "license": "AGPL-3.0-only",
+  "keywords": ["polka", "artifacts", "share", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Полка",
+    "shortDescription": "Save pages, reports and prototypes to your shelf and share them by link",
+    "longDescription": "Полка keeps the pages, reports and prototypes you make with Codex and gives you an unlisted link that recipients open without an account. The plugin connects https://polochka.app/mcp (you sign in in the browser, no token) and installs the Полка skills.",
+    "developerName": "Artem Kruglov",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://polochka.app",
+    "privacyPolicyURL": "https://polochka.app/privacy",
+    "termsOfServiceURL": "https://polochka.app/terms",
+    "defaultPrompt": ["Сохрани это на Полку"]
+  }
+}
