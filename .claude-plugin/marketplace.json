@@ -2,13 +2,13 @@
   "name": "polka",
   "owner": { "name": "Artem Kruglov", "url": "https://github.com/artkruglov" },
   "metadata": {
-    "description": "Полка (polochka.app): a private shelf for the pages, reports and prototypes you make with an agent."
+    "description": "Полка (polochka.app): keeps the pages, reports and prototypes you make with an agent, and what you accepted, for people and for other agents."
   },
   "plugins": [
     {
       "name": "polka",
       "source": "./",
-      "description": "Save artifacts to Полка and share them by link: the remote MCP server https://polochka.app/mcp plus every skill under skills/.",
+      "description": "Save artifacts to Полка, accept a version and share it by link; other chats find it by text: the remote MCP server https://polochka.app/mcp plus every skill under skills/.",
       "category": "productivity",
       "homepage": "https://polochka.app"
     }
