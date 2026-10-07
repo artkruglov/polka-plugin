@@ -12,6 +12,7 @@
 //   node polka-sessions.mjs upload <session-id|file>
 //   node polka-sessions.mjs sync [--since 7d] [--source claude|codex]
 //   node polka-sessions.mjs hook                  (Claude Code SessionEnd hook; needs POLKA_SESSIONS=on)
+//   node polka-sessions.mjs managed-settings      (the hook for a company's Claude Code managed settings)
 //
 // See docs/specs/AGENT_SESSIONS.md.
 import { createHmac, createHash } from "node:crypto";
@@ -762,6 +763,20 @@ async function fingerprintKey(fetchImpl, conn) {
   return Buffer.from(key, "hex");
 }
 
+/**
+ * The part of Claude Code's managed-settings.json that sends every session:
+ * a company puts this file on its machines (MDM, or the claude.ai admin
+ * console), where a person cannot turn it off. Each person still runs
+ * `login` once with their own token.
+ */
+export function managedSettings({ script, node = "node", origin }) {
+  const quote = (value) => `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
+  return {
+    env: { POLKA_SESSIONS: "on", ...(origin ? { POLKA_ENDPOINT: origin } : {}) },
+    hooks: { SessionEnd: [{ hooks: [{ type: "command", command: `${quote(node)} ${quote(script)} hook` }] }] },
+  };
+}
+
 async function uploadOne(fetchImpl, conn, key, file, options) {
   const prepared = await prepareSession(file, key, { thinking: options.thinking });
   const saved = await call(fetchImpl, "POST", `${conn.origin}/api/v1/sessions`, conn.token, gzipSync(Buffer.from(JSON.stringify(prepared.body))));
@@ -797,6 +812,9 @@ Commands:
   sync                  Send new and changed sessions (with --since, --source)
   hook                  Claude Code SessionEnd hook: sends the ended session in
                         the background; does nothing unless POLKA_SESSIONS=on
+  managed-settings      Print the hook for Claude Code's managed-settings.json
+                        (with --script <where this file lives on the machines>,
+                        --node <node binary>, --endpoint)
 
 Options:
   --since <7d|12h>      Only sessions changed in this period (list, sync; sync default 7d)
@@ -823,6 +841,8 @@ function parse(argv) {
       json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       token: { type: "string" },
+      script: { type: "string" },
+      node: { type: "string" },
     },
   });
   if (values.token) throw new CliError("Never pass the token as an argument: use `polka-sessions login` or POLKA_TOKEN.", 2);
@@ -863,12 +883,26 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
         const token = (await stdin()).trim();
         if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new CliError("Paste the agent token on stdin, e.g. `pbpaste | polka-sessions login --endpoint https://…`.", 2);
         const conn = await connection(options, { ...env, POLKA_TOKEN: token });
-        await fingerprintKey(fetchImpl, conn);
+        const { notice } = await call(fetchImpl, "GET", `${conn.origin}/api/v1/sessions/key`, conn.token);
         await mkdir(STATE_DIR(), { recursive: true, mode: 0o700 });
         await writeFile(join(STATE_DIR(), "sessions-token"), `${token}\n`, { mode: 0o600 });
         await chmod(join(STATE_DIR(), "sessions-token"), 0o600);
         await writeFile(join(STATE_DIR(), "sessions.json"), `${JSON.stringify({ endpoint: conn.origin }, null, 2)}\n`);
         stdout.write(`Saved. Sessions go to ${conn.origin}.\n`);
+        if (notice) stdout.write(`\n${notice}\n`);
+        return 0;
+      }
+      case "managed-settings": {
+        const address = options.endpoint?.trim() || env.POLKA_ENDPOINT?.trim() || DEFAULT_ENDPOINT;
+        let origin = "";
+        if (address)
+          try {
+            origin = new URL(address).origin;
+          } catch {
+            throw new CliError("The endpoint must be a URL such as https://polka.example.com.", 2);
+          }
+        const script = resolve(options.script ?? fileURLToPath(import.meta.url));
+        stdout.write(`${JSON.stringify(managedSettings({ script, node: options.node, origin }), null, 2)}\n`);
         return 0;
       }
       case "list": {
