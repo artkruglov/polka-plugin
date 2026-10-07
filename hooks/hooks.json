@@ -1,0 +1,16 @@
+{
+  "description": "Полка: send the ended Claude Code session to your shelf (docs/specs/AGENT_SESSIONS.md). Does nothing unless POLKA_SESSIONS=on and a token is saved by `polka-sessions login`; secrets are redacted on this machine first.",
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/polka-sessions.mjs\" hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

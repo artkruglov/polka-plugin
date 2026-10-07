@@ -86,6 +86,10 @@ Find ids with polka_list_folders and polka_list; after a change, say what moved 
 
 To put a whole shelf in order («разложи полку», «наведи порядок в папках»), follow the `polka-organize` skill (https://polochka.app/.well-known/agent-skills/polka-organize/SKILL.md): read the shelf, propose folders, and move works only after the owner confirms.
 
+## 9. Agent sessions
+
+With the `sessions` permission («Сессии агентов») the owner's Claude Code and Codex sessions are on the shelf, sent by polka-sessions with secrets replaced on their computer. «что я делал на этой неделе», «сколько ушло токенов», «где агент видел секреты» → polka_sessions (facts of recent sessions: project, tool calls, tokens, cost, secrets status, alerts) and polka_session_stats (totals by day and model, secret fingerprints, hosts, MCP errors). Report facts and give each session's url; never guess a secret's value from its type or prefix. To send sessions the owner runs `node polka-sessions.mjs login` and `sync` (https://polochka.app/api/v1/cli/polka-sessions.mjs) or turns on the plugin's hook with POLKA_SESSIONS=on; it is their choice, never turn it on yourself.
+
 ## Never
 
 - Ask for, type or store the user's password, email code, OAuth code or token.
