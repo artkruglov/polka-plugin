@@ -176,15 +176,34 @@ export function toolKind(name) {
   return "other";
 }
 
-/** argv0 and a template with values blanked: "git push --force <arg>". */
+/** Shell words of one command, quotes kept together ("a b" is one word). */
+function shellWords(text) {
+  return [...text.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']+/g)].map((match) => match[0]);
+}
+/** Steps that only set the scene: the command worth naming comes after them. */
+const SETUP = /^(?:cd|pushd|popd|export|set|source|\.|unset|ulimit|umask|true|:)$/;
+
+/**
+ * argv0 and a template with values blanked: "git push --force origin". The
+ * first real step of a chain: `cd "<dir>"; npm test` is npm, not cd.
+ */
 export function commandShape(command) {
-  const first = command.trim().split(/\n|&&|\|\||;|\|/)[0].trim();
-  const words = first.split(/\s+/).filter(Boolean);
-  let i = 0;
-  while (i < words.length && /^[A-Z_][A-Z0-9_]*=/.test(words[i])) i++;
-  const argv0 = basename(words[i] ?? "");
-  const rest = words.slice(i + 1, i + 4).map((w) => (w.startsWith("-") ? w.replace(/=.*/, "=<v>") : /^[a-z][a-z-]{1,20}$/.test(w) ? w : "<arg>"));
-  return { argv0, template: [argv0, ...rest].join(" ").slice(0, 120) };
+  const steps = command
+    .trim()
+    .split(/\n|&&|\|\||;|\|/)
+    .map((step) => shellWords(step.trim()))
+    .filter((words) => words.length);
+  const shape = (words) => {
+    let i = 0;
+    while (i < words.length && /^[A-Z_][A-Z0-9_]*=/.test(words[i])) i++;
+    return { words, i, argv0: basename((words[i] ?? "").replace(/^["']|["']$/g, "")) };
+  };
+  const shaped = steps.map(shape);
+  const chosen = shaped.find((step) => step.argv0 && !SETUP.test(step.argv0)) ?? shaped[0] ?? { words: [], i: 0, argv0: "" };
+  const rest = chosen.words
+    .slice(chosen.i + 1, chosen.i + 4)
+    .map((w) => (w.startsWith("-") ? w.replace(/=.*/, "=<v>") : /^[a-z][a-z-]{1,20}$/.test(w) ? w : "<arg>"));
+  return { argv0: chosen.argv0, template: [chosen.argv0, ...rest].join(" ").slice(0, 120) };
 }
 
 /** Piping a download into a shell anywhere in the command. */

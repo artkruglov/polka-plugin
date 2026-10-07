@@ -1,6 +1,6 @@
 {
   "name": "polka",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Полка (polochka.app): your agent saves HTML pages, reports and prototypes to your private shelf and gives you a link.",
   "author": { "name": "Artem Kruglov", "url": "https://github.com/artkruglov" },
   "homepage": "https://polochka.app",
