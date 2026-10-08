@@ -1,7 +1,7 @@
 {
   "name": "polka",
   "version": "0.12.1",
-  "description": "Полка (polochka.app): your agent saves HTML pages, reports and prototypes to your private shelf and gives you a link.",
+  "description": "Polka (polochka.app): your agent saves HTML pages, reports and prototypes to your private shelf and gives you a link.",
   "author": { "name": "Artem Kruglov", "url": "https://github.com/artkruglov" },
   "homepage": "https://polochka.app",
   "repository": "https://github.com/artkruglov/polka",
@@ -10,15 +10,18 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Полка",
-    "shortDescription": "Save pages, reports and prototypes to your shelf and share them by link",
-    "longDescription": "Полка keeps the pages, reports and prototypes you make with Codex and gives you an unlisted link that recipients open without an account. The plugin connects https://polochka.app/mcp (you sign in in the browser, no token) and installs the Полка skills.",
+    "displayName": "Polka",
+    "shortDescription": "Save AI pages, share by link",
+    "longDescription": "Polka is a private shelf for the pages, reports, dashboards and prototypes you make with ChatGPT or Codex. Ask to save a page and Polka keeps it on your shelf; ask for a link and you get an unlisted link that recipients open in the browser without an account. Links expire after 1, 7 or 30 days and can be revoked at any time. Saved works can be listed, read and revised from the chat, and each link stays bound to the version it was made for. Sign in with your Polka account in the browser; no token to copy.",
     "developerName": "Artem Kruglov",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
     "websiteURL": "https://polochka.app",
+    "supportURL": "https://github.com/artkruglov/polka/blob/main/SUPPORT.md",
     "privacyPolicyURL": "https://polochka.app/privacy",
     "termsOfServiceURL": "https://polochka.app/terms",
-    "defaultPrompt": ["Сохрани это на Полку"]
+    "defaultPrompt": ["Save this page to Polka", "Save this to Polka and give me a link for a week", "What did I save to Polka this week?"],
+    "logo": "./assets/logo.png",
+    "composerIcon": "./assets/composer-icon.svg"
   }
 }
