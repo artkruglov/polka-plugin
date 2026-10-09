@@ -18,7 +18,7 @@
 import { createHmac, createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { closeSync, createReadStream, openSync, realpathSync } from "node:fs";
-import { appendFile, mkdir, readdir, readFile, stat, truncate, writeFile, chmod } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rename, stat, truncate, writeFile, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -694,9 +694,11 @@ export async function prepareSession(file, key, { thinking = false } = {}) {
 // The server
 
 class CliError extends Error {
-  constructor(message, code = 1) {
+  constructor(message, code = 1, status = null) {
     super(message);
     this.code = code;
+    /** The server's HTTP status, when it answered. */
+    this.status = status;
   }
 }
 
@@ -728,7 +730,7 @@ async function call(fetchImpl, method, url, token, body) {
       payload = { message: text.slice(0, 300) };
     }
     if (response.ok) return payload;
-    last = new CliError(`Полка answered ${response.status}${payload.code ? ` (${payload.code})` : ""}: ${payload.message ?? "no details"}`);
+    last = new CliError(`Полка answered ${response.status}${payload.code ? ` (${payload.code})` : ""}: ${payload.message ?? "no details"}`, 1, response.status);
     if (!(response.status === 429 || response.status >= 500)) throw last;
   }
   throw last;
@@ -775,9 +777,28 @@ export function managedSettings({ script, node = "node", origin }) {
   const quote = (value) => `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
   return {
     env: { POLKA_SESSIONS: "on", ...(origin ? { POLKA_ENDPOINT: origin } : {}) },
-    hooks: { SessionEnd: [{ hooks: [{ type: "command", command: `${quote(node)} ${quote(script)} hook` }] }] },
+    // SessionEnd hooks share 1.5 s unless a hook in settings asks for more. The
+    // hook only starts a detached upload, but node starting cold on a busy
+    // machine can take longer, and a hook cut short sends nothing.
+    hooks: { SessionEnd: [{ hooks: [{ type: "command", command: `${quote(node)} ${quote(script)} hook`, timeout: 10 }] }] },
   };
 }
+
+/**
+ * Writes changes into sessions-state.json, read again just before: the hook's
+ * upload and the scheduled sync can run at once, and neither may drop the
+ * other's marks. Written aside and renamed, so a reader never sees half a file.
+ */
+async function remember(statePath, changes) {
+  const state = { ...(await readJson(statePath, {})), ...changes };
+  await mkdir(STATE_DIR(), { recursive: true, mode: 0o700 });
+  const aside = `${statePath}.${process.pid}`;
+  await writeFile(aside, JSON.stringify(state));
+  await rename(aside, statePath);
+}
+
+/** Answers about one session (too big, malformed), not about the token, the shelf or the server. */
+const REFUSES_ONE = new Set([400, 413, 415, 422]);
 
 async function uploadOne(fetchImpl, conn, key, file, options) {
   const prepared = await prepareSession(file, key, { thinking: options.thinking });
@@ -811,7 +832,8 @@ Commands:
   list                  Local sessions, newest first
   preview <id|file>     What would be sent for one session; sends nothing
   upload <id|file>      Send one session
-  sync                  Send new and changed sessions (with --since, --source)
+  sync                  Send new and changed sessions (with --since, --source),
+                        reaching back to the last sync that went through
   hook                  Claude Code SessionEnd hook: sends the ended session in
                         the background; does nothing unless POLKA_SESSIONS=on
   managed-settings      Print the hook for Claude Code's managed-settings.json
@@ -927,24 +949,41 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
         const conn = await connection(options, env);
         const key = await fingerprintKey(fetchImpl, conn);
         const state = await readJson(statePath, {});
-        const files = options.command === "upload" ? [await findSession(options.target)] : await localSessions({ source: options.source, since: parseSince(options.since ?? "7d") });
+        const startedAt = Date.now();
+        // A sync reaches back to the start of the last one that went through:
+        // a session that ended without SessionEnd (a closed terminal, a crash)
+        // is found even if the machine was off for longer than --since.
+        const since = Math.min(parseSince(options.since ?? "7d"), typeof state.lastSyncAt === "number" ? state.lastSyncAt : Infinity);
+        const files = options.command === "upload" ? [await findSession(options.target)] : await localSessions({ source: options.source, since });
         let sent = 0;
         let skipped = 0;
+        let refused = 0;
         for (const file of files) {
           const mark = `${file.source}:${file.id}`;
           if (options.command === "sync" && state[mark]?.size === file.size && state[mark]?.mtimeMs === file.mtimeMs) {
             skipped++;
             continue;
           }
-          const result = await uploadOne(fetchImpl, conn, key, file, options);
-          state[mark] = { size: file.size, mtimeMs: file.mtimeMs, id: result.id };
-          await mkdir(STATE_DIR(), { recursive: true, mode: 0o700 });
-          await writeFile(statePath, JSON.stringify(state));
+          let result;
+          try {
+            result = await uploadOne(fetchImpl, conn, key, file, options);
+          } catch (error) {
+            // One session the server refuses must not hold back the others; it is
+            // tried again next time. A token, shelf or network problem stops the run.
+            if (options.command !== "sync" || !REFUSES_ONE.has(error.status)) throw error;
+            refused++;
+            stderr.write(`not sent ${mark}: ${error.message}\n`);
+            continue;
+          }
+          // The hook's upload marks its session too: the scheduled sync does not send it again.
+          await remember(statePath, { [mark]: { size: file.size, mtimeMs: file.mtimeMs, id: result.id } });
           sent++;
           stderr.write(`sent ${mark} → ${result.url ?? result.id} (secrets: ${result.prepared.report.status})\n`);
         }
-        stdout.write(options.json ? `${JSON.stringify({ sent, skipped })}\n` : `Sent ${sent}, unchanged ${skipped}.\n`);
-        return 0;
+        // Only a sync of every source vouches for all of them.
+        if (options.command === "sync" && !options.source && !refused) await remember(statePath, { lastSyncAt: startedAt });
+        stdout.write(options.json ? `${JSON.stringify({ sent, skipped, refused })}\n` : `Sent ${sent}, unchanged ${skipped}${refused ? `, refused ${refused}` : ""}.\n`);
+        return refused ? 1 : 0;
       }
       case "hook": {
         // Never fails the session: everything goes to a detached upload.
@@ -957,15 +996,21 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
         }
         const path = typeof input.transcript_path === "string" ? resolve(input.transcript_path) : "";
         if (!path.startsWith(CLAUDE_DIR()) || !path.endsWith(".jsonl")) return 0;
+        // /clear before the first prompt ends a session Claude Code never wrote down.
+        const written = !!(await stat(path).catch(() => null))?.isFile();
         // What the upload says goes to ~/.polka/sessions-hook.log, kept under 1 MB.
         let out = "ignore";
         try {
           await mkdir(STATE_DIR(), { recursive: true, mode: 0o700 });
           const log = join(STATE_DIR(), "sessions-hook.log");
           if ((await stat(log).catch(() => null))?.size > 1_048_576) await truncate(log, 0);
-          await appendFile(log, `${new Date().toISOString()} ${input.reason ?? "end"} ${basename(path)}\n`, { mode: 0o600 });
-          out = openSync(log, "a");
+          await appendFile(log, `${new Date().toISOString()} ${input.reason ?? "end"} ${basename(path)}${written ? "" : " (no file: nothing to send)"}\n`, { mode: 0o600 });
+          if (written) out = openSync(log, "a");
         } catch {}
+        if (!written) return 0;
+        // Detached: a session and process group of its own, so closing the
+        // terminal (SIGHUP to Claude Code and its hooks) does not stop an upload
+        // already started. One that never started is left to the scheduled sync.
         const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "upload", path], { detached: true, stdio: ["ignore", out, out], env });
         child.unref();
         if (typeof out === "number") closeSync(out);
