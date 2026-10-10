@@ -41,12 +41,20 @@ const OUTPUT_TAIL = 1_000;
 
 /** Rule families after gitleaks' defaults; bounded repetition only. */
 export const RULES = [
-  { type: "private-key", confidence: "high", re: /-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----[\s\S]{16,8192}?-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----/g },
+  {
+    type: "private-key",
+    confidence: "high",
+    re: /-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----[\s\S]{16,8192}?-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----/g,
+  },
   { type: "aws-access-key", confidence: "high", re: /\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b/g },
   { type: "github-token", confidence: "high", re: /\b(?:gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82})\b/g },
   { type: "gitlab-token", confidence: "high", re: /\bglpat-[\w-]{20}\b/g },
   { type: "anthropic-key", confidence: "high", re: /\bsk-ant-(?:api03|admin01|oat01)-[\w-]{80,}/g },
-  { type: "openai-key", confidence: "high", re: /\bsk-(?:proj-|svcacct-|admin-)?[\w-]{20,}T3BlbkFJ[\w-]{20,}|\bsk-proj-[\w-]{40,}/g },
+  {
+    type: "openai-key",
+    confidence: "high",
+    re: /\bsk-(?:proj-|svcacct-|admin-)?[\w-]{20,}T3BlbkFJ[\w-]{20,}|\bsk-proj-[\w-]{40,}/g,
+  },
   { type: "yandex-iam-token", confidence: "high", re: /\bt1\.[\w-]+=*\.[\w-]{86}=*/g },
   { type: "yandex-api-key", confidence: "high", re: /\bAQVN[\w-]{35,38}\b/g },
   { type: "yandex-oauth-token", confidence: "high", re: /\by0_[\w-]{55}\b/g },
@@ -60,12 +68,28 @@ export const RULES = [
   { type: "huggingface-token", confidence: "high", re: /\bhf_[A-Za-z]{34}\b/g },
   { type: "jwt", confidence: "high", re: /\beyJ[\w-]{10,}\.eyJ[\w-]{10,}\.[\w-]{10,}/g },
   // Only the password of a URL with credentials.
-  { type: "url-password", confidence: "high", group: 1, re: /\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s:/@'"`]{1,100}:([^\s@/'"`]{4,200})@[\w.-]+/gi },
-  { type: "auth-header", confidence: "medium", group: 1, re: /\b(?:authorization|x-api-key|api-key|x-auth-token)["']?\s*[:=]\s*["']?(?:Bearer|Basic|Token|Api-Key|OAuth)?\s*([A-Za-z0-9+/_.=-]{16,})/gi },
-  { type: "assignment", confidence: "medium", group: 1, re: /\b(?:[A-Za-z_][A-Za-z0-9_]{0,60})?(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CLIENT_?SECRET|CREDENTIALS?|DSN)[A-Za-z0-9_]{0,30}["']?[ \t]*[:=][ \t]*["']?([^\s"'`,;\\%][^\s"'`,;\\]{7,299})/gi },
+  {
+    type: "url-password",
+    confidence: "high",
+    group: 1,
+    re: /\b[a-z][a-z0-9+.-]{1,20}:\/\/[^\s:/@'"`]{1,100}:([^\s@/'"`]{4,200})@[\w.-]+/gi,
+  },
+  {
+    type: "auth-header",
+    confidence: "medium",
+    group: 1,
+    re: /\b(?:authorization|x-api-key|api-key|x-auth-token)["']?\s*[:=]\s*["']?(?:Bearer|Basic|Token|Api-Key|OAuth)?\s*([A-Za-z0-9+/_.=-]{16,})/gi,
+  },
+  {
+    type: "assignment",
+    confidence: "medium",
+    group: 1,
+    re: /\b(?:[A-Za-z_][A-Za-z0-9_]{0,60})?(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CLIENT_?SECRET|CREDENTIALS?|DSN)[A-Za-z0-9_]{0,30}["']?[ \t]*[:=][ \t]*["']?([^\s"'`,;\\%][^\s"'`,;\\]{7,299})/gi,
+  },
 ];
 
-const PLACEHOLDER = /^(?:changeme|x{3,}|\*{3,}|<[^>]*>|\$\{[^}]*\}|\$[A-Z_]+|(?:process\.env|os\.environ)\b.*|your[-_].*|example.*|dummy.*|test|null|undefined|true|false|none|\[REDACTED.*)$/i;
+const PLACEHOLDER =
+  /^(?:changeme|x{3,}|\*{3,}|<[^>]*>|\$\{[^}]*\}|\$[A-Z_]+|(?:process\.env|os\.environ)\b.*|your[-_].*|example.*|dummy.*|test|null|undefined|true|false|none|\[REDACTED.*)$/i;
 
 /**
  * Code, not a value: a call, an interpolation, a dotted name, a bare word.
@@ -84,7 +108,8 @@ const NOT_SECRET = (value) => PLACEHOLDER.test(value) || /^[./~]/.test(value);
  * (`*_SECRET=<64 hex>`) it is one: a random secret is often hex.
  */
 const LOOKS_LIKE_HASH = (value) =>
-  /^[0-9a-f]{40}$|^[0-9a-f]{64}$/i.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  /^[0-9a-f]{40}$|^[0-9a-f]{64}$/i.test(value) ||
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 /**
  * The captured value inside its match, found from the end: the value is the
@@ -114,16 +139,43 @@ export function createRedactor(key) {
   const fp = (value) => createHmac("sha256", key).update(value).digest("hex").slice(0, 12);
   const samples = [];
   /** For tuning the rules: the shape of a value and its masked surroundings, never the value. */
-  const shape = (value) => value.replace(/[A-Z]/g, "A").replace(/[a-z]/g, "a").replace(/[0-9]/g, "9").replace(/(.)\1{3,}/g, "$1…");
+  const shape = (value) =>
+    value
+      .replace(/[A-Z]/g, "A")
+      .replace(/[a-z]/g, "a")
+      .replace(/[0-9]/g, "9")
+      .replace(/(.)\1{3,}/g, "$1…");
   let context = "";
   function note(type, confidence, value, where) {
     if (samples.length < 50 && Math.random() < 0.05) {
       const at = context.indexOf(value);
-      samples.push({ type, where, shape: shape(value).slice(0, 40), before: at >= 0 ? context.slice(Math.max(0, at - 40), at).replace(/[A-Za-z0-9]{6,}/g, (w) => (/^[a-z_]+$/i.test(w) ? w : shape(w))) : "", length: value.length });
+      samples.push({
+        type,
+        where,
+        shape: shape(value).slice(0, 40),
+        before:
+          at >= 0
+            ? context
+                .slice(Math.max(0, at - 40), at)
+                .replace(/[A-Za-z0-9]{6,}/g, (w) => (/^[a-z_]+$/i.test(w) ? w : shape(w)))
+            : "",
+        length: value.length,
+      });
     }
     const id = fp(value);
-    const prefix = (/^(?:sk-ant-|sk-proj-|sk-|ghp_|gho_|github_pat_|glpat-|AKIA|ASIA|xox[a-z]-|AIza|y0_|t1\.|AQVN|eyJ|npm_|hf_)/.exec(value) ?? [""])[0];
-    const entry = findings.get(id) ?? { type, confidence, fp: id, prefix, length: value.length, occurrences: 0, where: {} };
+    const prefix =
+      (/^(?:sk-ant-|sk-proj-|sk-|ghp_|gho_|github_pat_|glpat-|AKIA|ASIA|xox[a-z]-|AIza|y0_|t1\.|AQVN|eyJ|npm_|hf_)/.exec(
+        value,
+      ) ?? [""])[0];
+    const entry = findings.get(id) ?? {
+      type,
+      confidence,
+      fp: id,
+      prefix,
+      length: value.length,
+      occurrences: 0,
+      where: {},
+    };
     entry.occurrences++;
     entry.where[where] = (entry.where[where] ?? 0) + 1;
     findings.set(id, entry);
@@ -149,7 +201,14 @@ export function createRedactor(key) {
     out = out.replace(
       /\b(?:key|token|secret|passw(?:or)?d|auth|bearer|credential|apikey|access)[\w-]{0,20}["'\]]?\s*(?:[:=]|=>|\s)\s*["'`]?([A-Za-z0-9+/_-]{24,128}={0,2})(?![A-Za-z0-9+/_=-])/gi,
       (match, token) => {
-        if (NOT_SECRET(token) || LOOKS_LIKE_HASH(token) || /^[A-Za-z_-]+$/.test(token) || !/\d/.test(token) || entropy(token) < 4) return match;
+        if (
+          NOT_SECRET(token) ||
+          LOOKS_LIKE_HASH(token) ||
+          /^[A-Za-z_-]+$/.test(token) ||
+          !/\d/.test(token) ||
+          entropy(token) < 4
+        )
+          return match;
         return replaceGroup(match, token, note("generic-key", "low", token, where), "");
       },
     );
@@ -165,7 +224,8 @@ const NETWORK_TOOLS = /^(?:WebFetch|WebSearch|web_search|web_fetch)$/;
 const EDIT_TOOLS = /^(?:Write|Edit|MultiEdit|NotebookEdit|apply_patch)$/;
 const READ_TOOLS = /^(?:Read|Grep|Glob|LS|view_image)$/;
 const SHELL_TOOLS = /^(?:Bash|BashOutput|shell|shell_command|exec|exec_command|local_shell|unified_exec|write_stdin)$/;
-const NETWORK_COMMAND = /\b(?:curl|wget|ssh|scp|rsync|nc|telnet|git\s+push|gh\s|npm\s+publish|docker\s+push|aws\s|gcloud\s|yc\s|psql\s|mysql\s|redis-cli|kubectl\s|helm\s|terraform\s)/;
+const NETWORK_COMMAND =
+  /\b(?:curl|wget|ssh|scp|rsync|nc|telnet|git\s+push|gh\s|npm\s+publish|docker\s+push|aws\s|gcloud\s|yc\s|psql\s|mysql\s|redis-cli|kubectl\s|helm\s|terraform\s)/;
 const WORK_ID = /(?:\/works\/|"artifactId"\s*:\s*")([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 
 export function toolKind(name) {
@@ -201,7 +261,8 @@ export function commandShape(command) {
     return { words, i, argv0: basename((words[i] ?? "").replace(/^["']|["']$/g, "")) };
   };
   const shaped = steps.map(shape);
-  const chosen = shaped.find((step) => step.argv0 && !SETUP.test(step.argv0)) ?? shaped[0] ?? { words: [], i: 0, argv0: "" };
+  const chosen = shaped.find((step) => step.argv0 && !SETUP.test(step.argv0)) ??
+    shaped[0] ?? { words: [], i: 0, argv0: "" };
   const rest = chosen.words
     .slice(chosen.i + 1, chosen.i + 4)
     .map((w) => (w.startsWith("-") ? w.replace(/=.*/, "=<v>") : /^[a-z][a-z-]{1,20}$/.test(w) ? w : "<arg>"));
@@ -213,24 +274,48 @@ const PIPE_TO_SHELL = /\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b/;
 
 export function hostsIn(text) {
   const hosts = new Set();
-  for (const match of String(text).matchAll(/\b(?:https?|wss?|ssh|git|postgres(?:ql)?|mysql|redis|mongodb(?:\+srv)?):\/\/(?:[^@\s/'"]*@)?([a-z0-9.-]+\.[a-z]{2,24}|\d{1,3}(?:\.\d{1,3}){3}|localhost)/gi))
+  for (const match of String(text).matchAll(
+    /\b(?:https?|wss?|ssh|git|postgres(?:ql)?|mysql|redis|mongodb(?:\+srv)?):\/\/(?:[^@\s/'"]*@)?([a-z0-9.-]+\.[a-z]{2,24}|\d{1,3}(?:\.\d{1,3}){3}|localhost)/gi,
+  ))
     hosts.add(match[1].toLowerCase());
-  for (const match of String(text).matchAll(/\b(?:ssh|scp|rsync)\s+(?:-\S+\s+)*(?:[\w.-]+@)?([a-z0-9.-]+\.[a-z]{2,24})/gi)) hosts.add(match[1].toLowerCase());
+  for (const match of String(text).matchAll(
+    /\b(?:ssh|scp|rsync)\s+(?:-\S+\s+)*(?:[\w.-]+@)?([a-z0-9.-]+\.[a-z]{2,24})/gi,
+  ))
+    hosts.add(match[1].toLowerCase());
   return [...hosts].slice(0, 20);
 }
 
-const bytes = (value) => (value === undefined || value === null ? 0 : typeof value === "string" ? Buffer.byteLength(value) : Buffer.byteLength(JSON.stringify(value)));
+const bytes = (value) =>
+  value === undefined || value === null
+    ? 0
+    : typeof value === "string"
+      ? Buffer.byteLength(value)
+      : Buffer.byteLength(JSON.stringify(value));
 const ms = (iso) => (iso ? Date.parse(iso) : NaN);
 const clip = (text, n) => (text.length > n ? `${text.slice(0, n)}… [${text.length - n} more characters]` : text);
 const headTail = (text) =>
-  text.length > OUTPUT_HEAD + OUTPUT_TAIL + 100 ? `${text.slice(0, OUTPUT_HEAD)}\n… [${text.length - OUTPUT_HEAD - OUTPUT_TAIL} characters left out] …\n${text.slice(-OUTPUT_TAIL)}` : text;
+  text.length > OUTPUT_HEAD + OUTPUT_TAIL + 100
+    ? `${text.slice(0, OUTPUT_HEAD)}\n… [${text.length - OUTPUT_HEAD - OUTPUT_TAIL} characters left out] …\n${text.slice(-OUTPUT_TAIL)}`
+    : text;
 
 /** Text of a message or tool result; images and documents become a marker. */
 function textOf(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return content === undefined || content === null ? "" : JSON.stringify(content);
   return content
-    .map((block) => (typeof block === "string" ? block : block?.type === "text" ? block.text : block?.type === "image" ? "[image]" : block?.type === "document" ? "[document]" : block?.type === "tool_reference" ? "" : JSON.stringify(block)))
+    .map((block) =>
+      typeof block === "string"
+        ? block
+        : block?.type === "text"
+          ? block.text
+          : block?.type === "image"
+            ? "[image]"
+            : block?.type === "document"
+              ? "[document]"
+              : block?.type === "tool_reference"
+                ? ""
+                : JSON.stringify(block),
+    )
     .join("\n");
 }
 
@@ -329,7 +414,17 @@ export async function parseClaude(file, redactor, { transcript = null, thinking 
           } else if (block.type === "tool_use") {
             const kind = toolKind(block.name);
             const command = kind === "shell" ? String(block.input?.command ?? "") : "";
-            const input = scan(redactor, block.input, kind === "shell" ? "tool_input_command" : kind === "web" || kind === "mcp" ? "tool_input_network" : kind === "edit" ? "tool_input_file" : "tool_input");
+            const input = scan(
+              redactor,
+              block.input,
+              kind === "shell"
+                ? "tool_input_command"
+                : kind === "web" || kind === "mcp"
+                  ? "tool_input_network"
+                  : kind === "edit"
+                    ? "tool_input_file"
+                    : "tool_input",
+            );
             const call = {
               seq: index.toolCalls.length,
               t,
@@ -343,7 +438,12 @@ export async function parseClaude(file, redactor, { transcript = null, thinking 
               agent: record.isSidechain ? "subagent" : "main",
               ...(command ? commandShape(command) : {}),
               ...(command && PIPE_TO_SHELL.test(command) ? { pipeToShell: true } : {}),
-              hosts: kind === "shell" ? hostsIn(command) : kind === "web" ? hostsIn(block.input?.url ?? block.input?.query ?? "") : [],
+              hosts:
+                kind === "shell"
+                  ? hostsIn(command)
+                  : kind === "web"
+                    ? hostsIn(block.input?.url ?? block.input?.query ?? "")
+                    : [],
               network: kind === "web" || kind === "mcp" || (kind === "shell" && NETWORK_COMMAND.test(command)),
             };
             calls.set(block.id, call);
@@ -390,7 +490,12 @@ export async function parseClaude(file, redactor, { transcript = null, thinking 
         index.costUSD = record.totalCostUSD ?? index.costUSD;
         break;
       case "pr-link":
-        if (typeof record.prUrl === "string" && /^https:\/\//.test(record.prUrl) && !index.links.prs.includes(record.prUrl) && index.links.prs.length < 100)
+        if (
+          typeof record.prUrl === "string" &&
+          record.prUrl.startsWith("https://") &&
+          !index.links.prs.includes(record.prUrl) &&
+          index.links.prs.length < 100
+        )
           index.links.prs.push(record.prUrl.slice(0, 500));
         break;
       case "attachment":
@@ -439,7 +544,9 @@ export async function parseCodex(file, redactor, { transcript = null, thinking =
         index.project.cwd ??= p.cwd ?? null;
         index.cliVersion ??= p.cli_version ?? null;
         index.project.gitBranch ??= p.git?.branch ?? null;
-        index.project.remote ??= p.git?.repository_url ? String(p.git.repository_url).replace(/\/\/[^@/]*@/, "//") : null;
+        index.project.remote ??= p.git?.repository_url
+          ? String(p.git.repository_url).replace(/\/\/[^@/]*@/, "//")
+          : null;
         break;
       case "turn_context/":
         model = p.model ?? model;
@@ -473,7 +580,9 @@ export async function parseCodex(file, redactor, { transcript = null, thinking =
       case "response_item/custom_tool_call":
       case "response_item/web_search_call":
       case "response_item/local_shell_call": {
-        const name = p.name ?? (p.type === "web_search_call" ? "web_search" : p.type === "local_shell_call" ? "local_shell" : "tool");
+        const name =
+          p.name ??
+          (p.type === "web_search_call" ? "web_search" : p.type === "local_shell_call" ? "local_shell" : "tool");
         let args = p.arguments ?? p.input ?? p.action ?? null;
         if (typeof args === "string") {
           try {
@@ -484,9 +593,24 @@ export async function parseCodex(file, redactor, { transcript = null, thinking =
         }
         // Codex names an MCP tool by its server as the namespace (mcp__<server>).
         const toolKindName = p.namespace?.startsWith("mcp__") ? "mcp" : toolKind(name);
-        const commandRaw = toolKindName === "shell" ? (Array.isArray(args?.cmd ?? args?.command) ? (args.cmd ?? args.command).join(" ") : String(args?.cmd ?? args?.command ?? (typeof args === "string" ? args : ""))) : "";
+        const commandRaw =
+          toolKindName === "shell"
+            ? Array.isArray(args?.cmd ?? args?.command)
+              ? (args.cmd ?? args.command).join(" ")
+              : String(args?.cmd ?? args?.command ?? (typeof args === "string" ? args : ""))
+            : "";
         const command = commandRaw.replace(/^(?:bash|zsh|sh) -l?c /, "");
-        const input = scan(redactor, args, toolKindName === "shell" ? "tool_input_command" : toolKindName === "web" || toolKindName === "mcp" ? "tool_input_network" : toolKindName === "edit" ? "tool_input_file" : "tool_input");
+        const input = scan(
+          redactor,
+          args,
+          toolKindName === "shell"
+            ? "tool_input_command"
+            : toolKindName === "web" || toolKindName === "mcp"
+              ? "tool_input_network"
+              : toolKindName === "edit"
+                ? "tool_input_file"
+                : "tool_input",
+        );
         const call = {
           seq: index.toolCalls.length,
           t,
@@ -500,8 +624,16 @@ export async function parseCodex(file, redactor, { transcript = null, thinking =
           agent: "main",
           ...(command ? commandShape(command) : {}),
           ...(command && PIPE_TO_SHELL.test(command) ? { pipeToShell: true } : {}),
-          hosts: toolKindName === "shell" ? hostsIn(command) : toolKindName === "web" ? hostsIn(JSON.stringify(args ?? "")) : [],
-          network: toolKindName === "web" || toolKindName === "mcp" || (toolKindName === "shell" && NETWORK_COMMAND.test(command)),
+          hosts:
+            toolKindName === "shell"
+              ? hostsIn(command)
+              : toolKindName === "web"
+                ? hostsIn(JSON.stringify(args ?? ""))
+                : [],
+          network:
+            toolKindName === "web" ||
+            toolKindName === "mcp" ||
+            (toolKindName === "shell" && NETWORK_COMMAND.test(command)),
         };
         if (p.call_id) calls.set(p.call_id, call);
         index.toolCalls.push(call);
@@ -578,13 +710,26 @@ export function secretsReport(findings) {
     return {
       ...f,
       seenByModel: !!(w.user_prompt || w.tool_output || w.file_read),
-      modelEmitted: !!(w.assistant_text || w.thinking || w.tool_input || w.tool_input_command || w.tool_input_network || w.tool_input_file),
+      modelEmitted: !!(
+        w.assistant_text ||
+        w.thinking ||
+        w.tool_input ||
+        w.tool_input_command ||
+        w.tool_input_network ||
+        w.tool_input_file
+      ),
       toCommand: !!w.tool_input_command,
       toNetwork: !!w.tool_input_network,
       writtenToFile: !!w.tool_input_file,
     };
   });
-  const status = items.some((i) => i.toNetwork) ? "sent_out" : items.some((i) => i.toCommand || i.writtenToFile) ? "used" : items.length ? "seen" : "clean";
+  const status = items.some((i) => i.toNetwork)
+    ? "sent_out"
+    : items.some((i) => i.toCommand || i.writtenToFile)
+      ? "used"
+      : items.length
+        ? "seen"
+        : "clean";
   return { status, items };
 }
 
@@ -619,7 +764,13 @@ export async function localSessions({ source, since } = {}) {
       files.push({ source: "claude-code", path, id: basename(path, ".jsonl") });
   if (!source || source === "codex")
     for (const path of await walk(CODEX_DIR(), (name) => /^rollout-.*\.jsonl$/.test(name), 3, []))
-      files.push({ source: "codex", path, id: (/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/.exec(path) ?? [])[1] ?? basename(path) });
+      files.push({
+        source: "codex",
+        path,
+        id:
+          (/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/.exec(path) ?? [])[1] ??
+          basename(path),
+      });
   const out = [];
   for (const file of files) {
     const info = await stat(file.path);
@@ -664,7 +815,9 @@ export async function prepareSession(file, key, { thinking = false } = {}) {
     turns: index.turns,
     prompts: index.prompts,
     toolCallCount: total,
-    toolCalls: index.toolCalls.slice(0, MAX_TOOL_CALLS).map(({ t, agent, ...call }) => ({ ...call, at: Number.isFinite(t) ? t : null, subagent: agent === "subagent" })),
+    toolCalls: index.toolCalls
+      .slice(0, MAX_TOOL_CALLS)
+      .map(({ t, agent, ...call }) => ({ ...call, at: Number.isFinite(t) ? t : null, subagent: agent === "subagent" })),
     tokens: index.tokens,
     models: index.models,
     costUSD: index.costUSD,
@@ -684,7 +837,15 @@ export async function prepareSession(file, key, { thinking = false } = {}) {
     })),
     secretsStatus: report.status,
   };
-  const lines = [JSON.stringify({ schema: "polka-session-transcript/1", source: index.source, externalId: body.externalId, thinking }), ...transcript.map((event) => JSON.stringify(event))];
+  const lines = [
+    JSON.stringify({
+      schema: "polka-session-transcript/1",
+      source: index.source,
+      externalId: body.externalId,
+      thinking,
+    }),
+    ...transcript.map((event) => JSON.stringify(event)),
+  ];
   const transcriptGz = gzipSync(Buffer.from(`${lines.join("\n")}\n`));
   body.transcript = { sha256: createHash("sha256").update(transcriptGz).digest("hex"), bytes: transcriptGz.length };
   return { body, transcriptGz, index, report };
@@ -730,7 +891,11 @@ async function call(fetchImpl, method, url, token, body) {
       payload = { message: text.slice(0, 300) };
     }
     if (response.ok) return payload;
-    last = new CliError(`Полка answered ${response.status}${payload.code ? ` (${payload.code})` : ""}: ${payload.message ?? "no details"}`, 1, response.status);
+    last = new CliError(
+      `Полка answered ${response.status}${payload.code ? ` (${payload.code})` : ""}: ${payload.message ?? "no details"}`,
+      1,
+      response.status,
+    );
     if (!(response.status === 429 || response.status >= 500)) throw last;
   }
   throw last;
@@ -749,7 +914,11 @@ async function connection(options, env) {
       if (error instanceof CliError) throw error;
     }
   }
-  if (!token) throw new CliError("No token: run `polka-sessions login`, or set POLKA_TOKEN to an agent token with the «Сессии агентов» permission (Полка → Агенты).", 2);
+  if (!token)
+    throw new CliError(
+      "No token: run `polka-sessions login`, or set POLKA_TOKEN to an agent token with the «Сессии агентов» permission (Полка → Агенты).",
+      2,
+    );
   const address = options.endpoint?.trim() || env.POLKA_ENDPOINT?.trim() || saved.endpoint || DEFAULT_ENDPOINT;
   if (!address) throw new CliError("Set POLKA_ENDPOINT or pass --endpoint with your Полка address.", 2);
   let endpoint;
@@ -758,7 +927,8 @@ async function connection(options, env) {
   } catch {
     throw new CliError("The endpoint must be a URL such as https://polka.example.com.", 2);
   }
-  if (endpoint.protocol !== "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)) throw new CliError("The endpoint must use https.", 2);
+  if (endpoint.protocol !== "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname))
+    throw new CliError("The endpoint must use https.", 2);
   return { token, origin: endpoint.origin };
 }
 
@@ -780,7 +950,9 @@ export function managedSettings({ script, node = "node", origin }) {
     // SessionEnd hooks share 1.5 s unless a hook in settings asks for more. The
     // hook only starts a detached upload, but node starting cold on a busy
     // machine can take longer, and a hook cut short sends nothing.
-    hooks: { SessionEnd: [{ hooks: [{ type: "command", command: `${quote(node)} ${quote(script)} hook`, timeout: 10 }] }] },
+    hooks: {
+      SessionEnd: [{ hooks: [{ type: "command", command: `${quote(node)} ${quote(script)} hook`, timeout: 10 }] }],
+    },
   };
 }
 
@@ -802,8 +974,21 @@ const REFUSES_ONE = new Set([400, 413, 415, 422]);
 
 async function uploadOne(fetchImpl, conn, key, file, options) {
   const prepared = await prepareSession(file, key, { thinking: options.thinking });
-  const saved = await call(fetchImpl, "POST", `${conn.origin}/api/v1/sessions`, conn.token, gzipSync(Buffer.from(JSON.stringify(prepared.body))));
-  if (saved.transcriptNeeded) await call(fetchImpl, "PUT", `${conn.origin}/api/v1/sessions/${saved.id}/transcript`, conn.token, prepared.transcriptGz);
+  const saved = await call(
+    fetchImpl,
+    "POST",
+    `${conn.origin}/api/v1/sessions`,
+    conn.token,
+    gzipSync(Buffer.from(JSON.stringify(prepared.body))),
+  );
+  if (saved.transcriptNeeded)
+    await call(
+      fetchImpl,
+      "PUT",
+      `${conn.origin}/api/v1/sessions/${saved.id}/transcript`,
+      conn.token,
+      prepared.transcriptGz,
+    );
   return { ...saved, prepared };
 }
 
@@ -869,8 +1054,10 @@ function parse(argv) {
       node: { type: "string" },
     },
   });
-  if (values.token) throw new CliError("Never pass the token as an argument: use `polka-sessions login` or POLKA_TOKEN.", 2);
-  if (values.source && !["claude", "codex"].includes(values.source)) throw new CliError("--source is claude or codex.", 2);
+  if (values.token)
+    throw new CliError("Never pass the token as an argument: use `polka-sessions login` or POLKA_TOKEN.", 2);
+  if (values.source && !["claude", "codex"].includes(values.source))
+    throw new CliError("--source is claude or codex.", 2);
   return { ...values, command: positionals[0], target: positionals[1] };
 }
 
@@ -881,7 +1068,15 @@ async function findSession(target) {
     const isCodex = path.startsWith(CODEX_DIR()) || basename(path).startsWith("rollout-");
     const info = await stat(path).catch(() => null);
     if (!info) throw new CliError(`No such file: ${target}`, 2);
-    return { source: isCodex ? "codex" : "claude-code", path, id: (/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/.exec(path) ?? [])[1] ?? basename(path), size: info.size, mtimeMs: info.mtimeMs };
+    return {
+      source: isCodex ? "codex" : "claude-code",
+      path,
+      id:
+        (/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/.exec(path) ?? [])[1] ??
+        basename(path),
+      size: info.size,
+      mtimeMs: info.mtimeMs,
+    };
   }
   const found = (await localSessions()).find((file) => file.id === target || file.id.startsWith(target));
   if (!found) throw new CliError(`No local session ${target}.`, 2);
@@ -894,7 +1089,16 @@ const readStdin = async () => {
   return Buffer.concat(chunks).toString("utf8");
 };
 
-export async function main(argv = process.argv.slice(2), { env = process.env, fetchImpl = globalThis.fetch, stdout = process.stdout, stderr = process.stderr, stdin = readStdin } = {}) {
+export async function main(
+  argv = process.argv.slice(2),
+  {
+    env = process.env,
+    fetchImpl = globalThis.fetch,
+    stdout = process.stdout,
+    stderr = process.stderr,
+    stdin = readStdin,
+  } = {},
+) {
   try {
     const options = parse(argv);
     if (options.help || !options.command) {
@@ -905,7 +1109,11 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
     switch (options.command) {
       case "login": {
         const token = (await stdin()).trim();
-        if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new CliError("Paste the agent token on stdin, e.g. `pbpaste | polka-sessions login --endpoint https://…`.", 2);
+        if (!/^[A-Za-z0-9_-]{43}$/.test(token))
+          throw new CliError(
+            "Paste the agent token on stdin, e.g. `pbpaste | polka-sessions login --endpoint https://…`.",
+            2,
+          );
         const conn = await connection(options, { ...env, POLKA_TOKEN: token });
         const { notice } = await call(fetchImpl, "GET", `${conn.origin}/api/v1/sessions/key`, conn.token);
         await mkdir(STATE_DIR(), { recursive: true, mode: 0o700 });
@@ -932,16 +1140,35 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
       case "list": {
         const state = await readJson(statePath, {});
         const files = await localSessions({ source: options.source, since: parseSince(options.since) });
-        if (options.json) stdout.write(`${JSON.stringify(files.map((f) => ({ ...f, uploaded: !!state[`${f.source}:${f.id}`] })), null, 2)}\n`);
-        else for (const f of files) stdout.write(`${new Date(f.mtimeMs).toISOString().slice(0, 16)}  ${f.source.padEnd(11)} ${f.id}  ${(f.size / 1048576).toFixed(1)} MB${state[`${f.source}:${f.id}`] ? "  sent" : ""}\n`);
+        if (options.json)
+          stdout.write(
+            `${JSON.stringify(
+              files.map((f) => ({ ...f, uploaded: !!state[`${f.source}:${f.id}`] })),
+              null,
+              2,
+            )}\n`,
+          );
+        else
+          for (const f of files)
+            stdout.write(
+              `${new Date(f.mtimeMs).toISOString().slice(0, 16)}  ${f.source.padEnd(11)} ${f.id}  ${(f.size / 1048576).toFixed(1)} MB${state[`${f.source}:${f.id}`] ? "  sent" : ""}\n`,
+            );
         return 0;
       }
       case "preview": {
         const file = await findSession(options.target);
         // Fingerprints here use a local key: the server's key is only fetched to send.
-        const { index, report, body, transcriptGz } = await prepareSession(file, Buffer.from("polka-sessions-preview"), { thinking: options.thinking });
-        if (options.json) stdout.write(`${JSON.stringify({ ...body, transcriptBytes: transcriptGz.length }, null, 2)}\n`);
-        else stdout.write(`${describe(index, report)}\ntranscript: ${(transcriptGz.length / 1024).toFixed(0)} KB compressed${options.thinking ? ", with thinking" : ""}\n`);
+        const { index, report, body, transcriptGz } = await prepareSession(
+          file,
+          Buffer.from("polka-sessions-preview"),
+          { thinking: options.thinking },
+        );
+        if (options.json)
+          stdout.write(`${JSON.stringify({ ...body, transcriptBytes: transcriptGz.length }, null, 2)}\n`);
+        else
+          stdout.write(
+            `${describe(index, report)}\ntranscript: ${(transcriptGz.length / 1024).toFixed(0)} KB compressed${options.thinking ? ", with thinking" : ""}\n`,
+          );
         return 0;
       }
       case "upload":
@@ -953,8 +1180,14 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
         // A sync reaches back to the start of the last one that went through:
         // a session that ended without SessionEnd (a closed terminal, a crash)
         // is found even if the machine was off for longer than --since.
-        const since = Math.min(parseSince(options.since ?? "7d"), typeof state.lastSyncAt === "number" ? state.lastSyncAt : Infinity);
-        const files = options.command === "upload" ? [await findSession(options.target)] : await localSessions({ source: options.source, since });
+        const since = Math.min(
+          parseSince(options.since ?? "7d"),
+          typeof state.lastSyncAt === "number" ? state.lastSyncAt : Infinity,
+        );
+        const files =
+          options.command === "upload"
+            ? [await findSession(options.target)]
+            : await localSessions({ source: options.source, since });
         let sent = 0;
         let skipped = 0;
         let refused = 0;
@@ -981,8 +1214,13 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
           stderr.write(`sent ${mark} → ${result.url ?? result.id} (secrets: ${result.prepared.report.status})\n`);
         }
         // Only a sync of every source vouches for all of them.
-        if (options.command === "sync" && !options.source && !refused) await remember(statePath, { lastSyncAt: startedAt });
-        stdout.write(options.json ? `${JSON.stringify({ sent, skipped, refused })}\n` : `Sent ${sent}, unchanged ${skipped}${refused ? `, refused ${refused}` : ""}.\n`);
+        if (options.command === "sync" && !options.source && !refused)
+          await remember(statePath, { lastSyncAt: startedAt });
+        stdout.write(
+          options.json
+            ? `${JSON.stringify({ sent, skipped, refused })}\n`
+            : `Sent ${sent}, unchanged ${skipped}${refused ? `, refused ${refused}` : ""}.\n`,
+        );
         return refused ? 1 : 0;
       }
       case "hook": {
@@ -1004,14 +1242,22 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
           await mkdir(STATE_DIR(), { recursive: true, mode: 0o700 });
           const log = join(STATE_DIR(), "sessions-hook.log");
           if ((await stat(log).catch(() => null))?.size > 1_048_576) await truncate(log, 0);
-          await appendFile(log, `${new Date().toISOString()} ${input.reason ?? "end"} ${basename(path)}${written ? "" : " (no file: nothing to send)"}\n`, { mode: 0o600 });
+          await appendFile(
+            log,
+            `${new Date().toISOString()} ${input.reason ?? "end"} ${basename(path)}${written ? "" : " (no file: nothing to send)"}\n`,
+            { mode: 0o600 },
+          );
           if (written) out = openSync(log, "a");
         } catch {}
         if (!written) return 0;
         // Detached: a session and process group of its own, so closing the
         // terminal (SIGHUP to Claude Code and its hooks) does not stop an upload
         // already started. One that never started is left to the scheduled sync.
-        const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "upload", path], { detached: true, stdio: ["ignore", out, out], env });
+        const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "upload", path], {
+          detached: true,
+          stdio: ["ignore", out, out],
+          env,
+        });
         child.unref();
         if (typeof out === "number") closeSync(out);
         return 0;
