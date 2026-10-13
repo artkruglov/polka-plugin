@@ -80,11 +80,23 @@ export const RULES = [
     group: 1,
     re: /\b(?:authorization|x-api-key|api-key|x-auth-token)["']?\s*[:=]\s*["']?(?:Bearer|Basic|Token|Api-Key|OAuth)?\s*([A-Za-z0-9+/_.=-]{16,})/gi,
   },
+  // Group 1 is the name: under a strongly named one (STRONG_NAME) only an
+  // obvious code reference is spared, see assignmentIsCode().
   {
     type: "assignment",
     confidence: "medium",
+    group: 2,
+    nameGroup: 1,
+    re: /\b((?:[A-Za-z_][A-Za-z0-9_]{0,60})?(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CLIENT_?SECRET|CREDENTIALS?|DSN)[A-Za-z0-9_]{0,30})["']?[ \t]*[:=][ \t]*["']?([^\s"'`,;\\%][^\s"'`,;\\]{7,299})/gi,
+  },
+  // A password on a client's command line: `mysql -pS3cret`, `sshpass -p …`,
+  // `curl -u user:…`. Spared only as a placeholder (`-p$MYSQL_PWD`).
+  {
+    type: "cli-password",
+    confidence: "medium",
     group: 1,
-    re: /\b(?:[A-Za-z_][A-Za-z0-9_]{0,60})?(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CLIENT_?SECRET|CREDENTIALS?|DSN)[A-Za-z0-9_]{0,30}["']?[ \t]*[:=][ \t]*["']?([^\s"'`,;\\%][^\s"'`,;\\]{7,299})/gi,
+    always: true,
+    re: /\b(?:(?:mysql|mysqldump|mysqladmin|mariadb)\b[^\n|;&]*?\s-p|sshpass\s+-p\s*|curl\b[^\n|;&]*?\s(?:-u\s*|--user[= ])[^\s:'"]+:)([^\s'"`;|&]{4,200})/g,
   },
 ];
 
@@ -103,6 +115,35 @@ const LOOKS_LIKE_CODE = (value) =>
 
 /** Already a fingerprint marker, a placeholder or a path: not a secret value. */
 const NOT_SECRET = (value) => PLACEHOLDER.test(value) || /^[./~]/.test(value);
+
+/** A name that holds a secret and nothing else: its value is one unless it is plainly code. */
+const STRONG_NAME = /SECRET|PASSWORD|PASSWD|TOKEN|API_?KEY|PRIVATE_?KEY/i;
+
+/**
+ * Code under a strong name (`password = getPassword()`, `token: config.token`,
+ * `SECRET=$(cat f)`, `accessToken = userToken`): a call, a dotted name, a bare
+ * `$VAR`, `${VAR}` or `$(…)`, a type, a camelCase or snake_case identifier
+ * without digits. A one-case word (`correcthorsebatterystaple`), anything
+ * with `$`, `!` or digits elsewhere and a path that is not under a *_FILE /
+ * *_PATH / *_DIR name are values. Under other names (PWD, DSN, ACCESS_KEY,
+ * CREDENTIALS) code is spared only with no digits and low entropy.
+ */
+function assignmentIsCode(name, value) {
+  // A marker already in the text: "[REDACTED:github-token:<fingerprint>]".
+  if (PLACEHOLDER.test(value) || /^[0-9a-f]{12}\]/.test(value)) return true;
+  if (!STRONG_NAME.test(name)) {
+    if (/^[./~]/.test(value)) return true;
+    return LOOKS_LIKE_CODE(value) && !/\d/.test(value) && entropy(value) < 4;
+  }
+  if (/^[./~]/.test(value)) return /(?:FILE|PATH|DIR)$/i.test(name) || (/^[\w./~-]+$/.test(value) && !/\d/.test(value));
+  return (
+    /^[A-Za-z_][\w.]*\(.*\)?$/.test(value) ||
+    /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$/.test(value) ||
+    /^\$(?:[A-Za-z_]\w*|\{[^}]*\}?|\(.*)$/.test(value) ||
+    /^(?:string|number|boolean|str|int|bytes|optional|required|secret|password|token)\b/i.test(value) ||
+    (/^[A-Za-z_]+$/.test(value) && /_|[a-z][A-Z]/.test(value))
+  );
+}
 /**
  * A hash or a UUID: no secret by itself, so the generic rule skips it. Named
  * (`*_SECRET=<64 hex>`) it is one: a random secret is often hex.
@@ -146,7 +187,8 @@ export function createRedactor(key) {
       .replace(/[0-9]/g, "9")
       .replace(/(.)\1{3,}/g, "$1…");
   let context = "";
-  function note(type, confidence, value, where) {
+  function note(type, confidence, value, where, quiet = false) {
+    if (quiet) return `[REDACTED:${type}:${fp(value)}]`;
     if (samples.length < 50 && Math.random() < 0.05) {
       const at = context.indexOf(value);
       samples.push({
@@ -181,7 +223,8 @@ export function createRedactor(key) {
     findings.set(id, entry);
     return `[REDACTED:${type}:${id}]`;
   }
-  function redact(text, where = "unknown") {
+  /** `quiet`: the same markers without counting a finding (a second pass over text already scanned). */
+  function redact(text, where = "unknown", { quiet = false } = {}) {
     if (typeof text !== "string" || text.length < 8) return text;
     context = text;
     let out = text;
@@ -189,9 +232,16 @@ export function createRedactor(key) {
       rule.re.lastIndex = 0;
       out = out.replace(rule.re, (match, ...groups) => {
         const value = rule.group ? groups[rule.group - 1] : match;
-        if (!value || NOT_SECRET(value)) return match;
-        if (rule.confidence !== "high" && LOOKS_LIKE_CODE(value)) return match;
-        const marker = note(rule.type, rule.confidence, value, where);
+        if (!value) return match;
+        if (rule.nameGroup) {
+          if (assignmentIsCode(groups[rule.nameGroup - 1], value)) return match;
+        } else if (rule.always) {
+          if (PLACEHOLDER.test(value)) return match;
+        } else {
+          if (NOT_SECRET(value)) return match;
+          if (rule.confidence !== "high" && LOOKS_LIKE_CODE(value)) return match;
+        }
+        const marker = note(rule.type, rule.confidence, value, where, quiet);
         return rule.group ? replaceGroup(match, value, marker, rule.type === "url-password" ? "@" : "") : marker;
       });
     }
@@ -209,7 +259,7 @@ export function createRedactor(key) {
           entropy(token) < 4
         )
           return match;
-        return replaceGroup(match, token, note("generic-key", "low", token, where), "");
+        return replaceGroup(match, token, note("generic-key", "low", token, where, quiet), "");
       },
     );
     return out;
@@ -246,8 +296,45 @@ function shellWords(text) {
 const SETUP = /^(?:cd|pushd|popd|export|set|source|\.|unset|ulimit|umask|true|:)$/;
 
 /**
- * argv0 and a template with values blanked: "git push --force origin". The
- * first real step of a chain: `cd "<dir>"; npm test` is npm, not cd.
+ * A flag on its own: `-rf`, `--force`, `-auto-approve`. A short flag longer
+ * than three letters or with a digit is a value glued on (`-pS3cret`,
+ * `-uadmin:pass`).
+ */
+const BARE_FLAG = /^(?:--[A-Za-z][\w-]*|-[A-Za-z]{1,3}|-[a-z]+(?:-[a-z]+)+)$/;
+/** A subcommand: a plain word before the first flag or argument (`git push`, `docker system prune`). */
+const SUBCOMMAND = /^[a-z][a-z-]{1,20}$/;
+
+/**
+ * The words after argv0 with every value blanked: subcommands, bare flags
+ * (`--name=<arg>` keeps the name) and `<arg>` for the rest. Also applied by
+ * the server to a template from an older CLI, so it must be idempotent.
+ */
+export function shapeArgs(words) {
+  let positional = true;
+  return words.map((word) => {
+    if (word.startsWith("-")) {
+      positional = false;
+      const eq = word.indexOf("=");
+      const name = eq < 0 ? word : word.slice(0, eq);
+      return BARE_FLAG.test(name) ? (eq < 0 ? name : `${name}=<arg>`) : "<arg>";
+    }
+    if (positional && SUBCOMMAND.test(word)) return word;
+    positional = false;
+    return "<arg>";
+  });
+}
+
+/** A template from any CLI version with its values blanked again ("mysql -u <arg> <arg>"). */
+export function scrubTemplate(template) {
+  const [argv0 = "", ...rest] = template.split(" ");
+  return [argv0, ...shapeArgs(rest)].join(" ").slice(0, 120);
+}
+
+/**
+ * argv0 and a template with values blanked: "git push --force <arg>". The
+ * first real step of a chain: `cd "<dir>"; npm test` is npm, not cd. Give it
+ * the redacted command: the template keeps subcommands and bare flags only,
+ * but argv0 is the command's own first word.
  */
 export function commandShape(command) {
   const steps = command
@@ -263,9 +350,7 @@ export function commandShape(command) {
   const shaped = steps.map(shape);
   const chosen = shaped.find((step) => step.argv0 && !SETUP.test(step.argv0)) ??
     shaped[0] ?? { words: [], i: 0, argv0: "" };
-  const rest = chosen.words
-    .slice(chosen.i + 1, chosen.i + 4)
-    .map((w) => (w.startsWith("-") ? w.replace(/=.*/, "=<v>") : /^[a-z][a-z-]{1,20}$/.test(w) ? w : "<arg>"));
+  const rest = shapeArgs(chosen.words.slice(chosen.i + 1, chosen.i + 4));
   return { argv0: chosen.argv0, template: [chosen.argv0, ...rest].join(" ").slice(0, 120) };
 }
 
@@ -436,7 +521,7 @@ export async function parseClaude(file, redactor, { transcript = null, thinking 
               inputBytes: bytes(block.input),
               outputBytes: 0,
               agent: record.isSidechain ? "subagent" : "main",
-              ...(command ? commandShape(command) : {}),
+              ...(command ? commandShape(redactor.redact(command, "tool_input_command", { quiet: true })) : {}),
               ...(command && PIPE_TO_SHELL.test(command) ? { pipeToShell: true } : {}),
               hosts:
                 kind === "shell"
@@ -622,7 +707,7 @@ export async function parseCodex(file, redactor, { transcript = null, thinking =
           inputBytes: bytes(p.arguments ?? p.input),
           outputBytes: 0,
           agent: "main",
-          ...(command ? commandShape(command) : {}),
+          ...(command ? commandShape(redactor.redact(command, "tool_input_command", { quiet: true })) : {}),
           ...(command && PIPE_TO_SHELL.test(command) ? { pipeToShell: true } : {}),
           hosts:
             toolKindName === "shell"
