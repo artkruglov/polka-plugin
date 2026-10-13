@@ -439,8 +439,41 @@ function seen(index, at) {
 /** Text the person or the model wrote, redacted; returns the redacted text. */
 function scan(redactor, text, where) {
   if (typeof text === "string") return redactor.redact(text, where);
-  if (text !== undefined && text !== null) return redactor.redact(JSON.stringify(text), where);
+  if (text !== undefined && text !== null) return redactJson(redactor, text, where);
   return "";
+}
+
+/**
+ * A structured value (tool arguments) as JSON, redacted. Every string is
+ * redacted decoded first: serialized, `PASSWORD="Secr3t123!"` becomes
+ * `PASSWORD=\"Secr3t123!\"` and a heredoc one line with `\n`, and the rules
+ * miss the value. Then the JSON once more, for a value whose name is its key
+ * (`{"PASSWORD": "…"}`); what the first pass replaced is a marker by then.
+ */
+function redactJson(redactor, value, where) {
+  return redactor.redact(JSON.stringify(redactStrings(redactor, value, where, 0)) ?? "", where);
+}
+
+function redactStrings(redactor, value, where, depth) {
+  if (typeof value === "string") {
+    // A string that holds JSON (an argument passed on as text) is decoded too.
+    if (depth < 8 && /^\s*[[{]/.test(value)) {
+      try {
+        const inner = JSON.parse(value);
+        if (inner && typeof inner === "object")
+          return redactor.redact(JSON.stringify(redactStrings(redactor, inner, where, depth + 1)), where);
+      } catch {
+        // not JSON after all
+      }
+    }
+    return redactor.redact(value, where);
+  }
+  if (Array.isArray(value)) return value.map((item) => redactStrings(redactor, item, where, depth + 1));
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([name, item]) => [name, redactStrings(redactor, item, where, depth + 1)]),
+    );
+  return value;
 }
 
 function noteWorks(index, call, text) {
@@ -730,7 +763,7 @@ export async function parseCodex(file, redactor, { transcript = null, thinking =
       case "response_item/local_shell_call_output": {
         const call = calls.get(p.call_id);
         const raw = typeof p.output === "string" ? p.output : JSON.stringify(p.output ?? "");
-        const output = scan(redactor, raw, "tool_output");
+        const output = scan(redactor, typeof p.output === "string" ? p.output : (p.output ?? ""), "tool_output");
         noteWorks(index, call, output);
         if (call) {
           const exit = /(?:Exit code|exit_code"?):?\s*(-?\d+)/i.exec(raw);
