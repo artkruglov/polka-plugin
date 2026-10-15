@@ -1,6 +1,6 @@
 ---
 name: polka
-description: "Save an HTML page, report, prototype or React artifact to Полка (Polka, polochka.app), the user's private shelf, and give the human an unlisted share link. Use when the user asks to save, publish or share an artifact to Полка/Polka («сохрани на Полку», «дай ссылку»), to connect Полка («Подключи Полку: …/connect»), to open, update or fix a saved work by its address («Открой на Полке работу …», «Обнови работу …», «Поправь работу … по моим заметкам»), or mentions polochka.app. Covers connecting (the human signs in in the browser; never handle passwords or tokens), polka_publish, links, moderation and how to present the result."
+description: "Save an HTML page, report, prototype, React artifact or a Markdown, CSV, JSON or PDF file to Полка (Polka, polochka.app), the user's private shelf, and give the human an unlisted share link. Use when the user asks to save, publish or share an artifact to Полка/Polka («сохрани на Полку», «дай ссылку»), to connect Полка («Подключи Полку: …/connect»), to open, update or fix a saved work by its address («Открой на Полке работу …», «Обнови работу …», «Поправь работу … по моим заметкам»), or mentions polochka.app. Covers connecting (the human signs in in the browser; never handle passwords or tokens), polka_publish, links, moderation and how to present the result."
 ---
 
 # Полка (Polka)
@@ -29,8 +29,9 @@ One call saves the artifact and returns the link:
 
 - `key`: a fresh UUID per artifact; reuse it only to retry the same call.
 - `title`: a short human title.
-- `html`: ONE self-contained HTML document up to 5 MB: CSS in <style>, images and fonts as data: URIs, no external URLs (the viewer has no network). Convert Markdown or text to semantic HTML first.
+- `html`: ONE self-contained HTML document up to 5 MB: CSS in <style>, images and fonts as data: URIs, no external URLs (the viewer has no network). Markdown or text meant to be read as a page: convert to semantic HTML first.
 - or `component`: a React (JSX/TSX) artifact's source as-is, where the tool description says this installation runs scripts (`componentLanguage: "tsx"` for TypeScript).
+- or `kind: "file"` with `name` and `text`: the file itself, when the user wants that file kept (a `.md` document, a `.csv` table, a `.json` result, a `.txt` note; a `.pdf` or a PNG, JPEG or WebP picture goes in `base64`). Up to 5 MB, text in UTF-8; JSON must parse. Полка shows Markdown as a document, CSV as a table, JSON as code and a PDF page by page (its scripts and forms never run), and the file downloads as it was.
 - `expiresInDays`: 1, 7 or 30 (default 30).
 - `folderId` (optional): when the owner keeps folders, call polka_list_folders and save into the one that clearly fits the work (the same project or topic, the next issue of a series). Do not create a folder for a single work; if none fits, save without one.
 
